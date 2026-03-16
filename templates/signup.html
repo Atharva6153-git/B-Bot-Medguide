@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signup - B Bot Medguide</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-3" style="background:#10b981;"></div>
+    </div>
+    <div id="particles"></div>
+
+    <div class="content">
+        <div class="auth-container" style="margin: 4vh auto;">
+            <h1>Join Medguide</h1>
+            <div class="card" style="margin-top: 20px;">
+                <h2>📝 Register</h2>
+                
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="flash {{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                <form method="POST">
+                    <div class="form-group" style="text-align: left;">
+                        <label>Full Name</label>
+                        <input type="text" name="username" placeholder="John Doe" required>
+                    </div>
+                    <div class="form-group" style="text-align: left;">
+                        <label>Email Address</label>
+                        <input type="email" name="email" placeholder="example@email.com" required>
+                    </div>
+                    <div class="form-group" style="text-align: left;">
+                        <label>Password</label>
+                        <input type="password" name="password" placeholder="••••••••" required>
+                    </div>
+                    
+                    <div style="display: flex; gap: 15px;">
+                        <div class="form-group" style="flex: 1; text-align: left;">
+                            <label>Age</label>
+                            <input type="number" name="age" placeholder="25" required>
+                        </div>
+                        <div class="form-group" style="flex: 1; text-align: left;">
+                            <label>Blood Group</label>
+                            <select name="blood_group" required>
+                                <option value="">Select</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O-</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block">Sign Up Now</button>
+                </form>
+                
+                <div class="auth-link">
+                    Already have an account? <a href="/login">Login here</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const container = document.getElementById('particles');
+    const colors = ['#3b82f6', '#06b6d4', '#10b981', '#ffffff'];
+    for(let i = 0; i < 30; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        if(Math.random() > 0.5) p.classList.add('plus');
+        const size = Math.random() * 8 + 4;
+        const col = colors[Math.floor(Math.random() * colors.length)];
+        p.style.cssText = `
+            width:${size}px; height:${size}px;
+            color: ${col};
+            background: ${p.classList.contains('plus') ? 'transparent' : col};
+            left:${Math.random()*100}%;
+            animation-duration:${Math.random()*15+10}s;
+            animation-delay:${Math.random()*10}s;
+        `;
+        container.appendChild(p);
+    }
+    </script>
+</body>
+</html>

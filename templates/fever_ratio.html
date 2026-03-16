@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fever Ratio - B Bot Medguide</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+    .ratio-card { background: rgba(255,255,255,0.7); padding: 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
+    .ratio-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-weight: 800; }
+    .illness-name { font-size: 1.3rem; color: var(--text-main); text-transform: uppercase; letter-spacing: 1px; }
+    .percent-value { font-size: 1.5rem; }
+    .description { margin-top: 15px; color: var(--text-muted); font-size: 1rem; }
+</style>
+</head>
+<body>
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-3" style="background: #f43f5e;"></div>
+    </div>
+    <div id="particles"></div>
+
+    <nav>
+        <div class="brand">🏥 B Bot Medguide</div>
+        <div class="nav-links">
+            <a href="/">💊 Medicines</a>
+            <a href="/chatbot">🤖 Chatbot</a>
+            <a href="/history">📋 History</a>
+            <a href="/skin">🖼️ Skin Check</a>
+            <a href="/hospitals">🏥 Hospitals</a>
+            <a href="/fever-ratio">📊 Fever Ratio</a>
+            <a href="/logout" class="logout">🚪 Logout</a>
+        </div>
+    </nav>
+
+    <div class="content">
+        <div class="container">
+            <h1 style="margin-bottom: 5px;">🌡️ Fever Probability Finder</h1>
+            <div class="subtitle">AI-Driven Fever Analysis</div>
+
+            <div class="card">
+                <p style="text-align: center; margin-bottom: 25px;">Enter your exact symptoms separated by commas. Our algorithm computes the probability ratio of different types of fever.</p>
+                <form method="POST">
+                    <div class="form-group">
+                        <input type="text" name="symptoms" placeholder="e.g. fever, headache, body pain, chills, rash..." 
+                            value="{{ symptoms or '' }}" required style="font-size: 1.2rem; padding: 20px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">🔍 Calculate Fever Ratio</button>
+                </form>
+            </div>
+
+            {% if ratios %}
+            <div class="card">
+                <h2 style="color: var(--primary);">📊 Diagnostic Probabilities</h2>
+                <p style="margin-bottom: 20px; font-weight: 600;">Analyzed Symptoms: <span style="color: var(--text-main);">{{ symptoms }}</span></p>
+
+                {% for illness, data in ratios.items() %}
+                <div class="ratio-card" style="border-left: 6px solid {{ data['color'] }};">
+                    <div class="ratio-header">
+                        <span class="illness-name">{{ illness }}</span>
+                        <span class="percent-value" style="color:{{ data['color'] }};">{{ data['probability'] }}%</span>
+                    </div>
+                    <div class="progress-wrap" style="background: rgba(0,0,0,0.05); box-shadow: none;">
+                        <div class="progress-bar" style="width:{{ data['probability'] }}%; background:{{ data['color'] }}; box-shadow: none;">
+                            {{ data['probability'] }}%
+                        </div>
+                    </div>
+                    <p class="description">{{ data['description'] }}</p>
+                </div>
+                {% endfor %}
+
+                <div class="ambulance" style="margin-top: 25px; padding: 20px;">
+                    <h3 style="font-size: 1.2rem; margin-bottom: 5px;">🚨 High Fever Warning</h3>
+                    <p style="font-size: 1rem; margin: 0;">If your fever exceeds 102°F or persists for more than 3 days, seek emergency medical care immediately.</p>
+                </div>
+            </div>
+            {% elif symptoms %}
+            <div class="card">
+                <div class="ambulance" style="text-align: left; padding: 25px;">
+                    <h3 style="font-size: 1.4rem;">❌ No Matches Found</h3>
+                    <p style="margin:0;">We couldn't confidently match probabilities for your symptoms. Please try keywords like 'fever', 'chills', 'rash', 'joint pain'.</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card">
+                <h2>🚨 Critical Warning Signs</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Symptom Combos</th>
+                                <th>Possible Condition</th>
+                                <th>Immediate Action Required</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Severe headache + rash</td><td>Dengue</td><td>Visit hospital immediately</td></tr>
+                            <tr><td>Recurring chills every 48h</td><td>Malaria</td><td>Blood test required</td></tr>
+                            <tr><td>Rose-colored spots on chest</td><td>Typhoid</td><td>Stool/blood culture</td></tr>
+                            <tr><td>Loss of taste/smell</td><td>COVID-19</td><td>RT-PCR test & isolate</td></tr>
+                            <tr><td>Mild fever + runny nose</td><td>Viral Fever</td><td>Rest + paracetamol</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+    const container = document.getElementById('particles');
+    const colors = ['#3b82f6', '#06b6d4', '#10b981', '#ffffff'];
+    for(let i = 0; i < 40; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        if(Math.random() > 0.5) p.classList.add('plus');
+        const size = Math.random() * 5 + 2;
+        const col = colors[Math.floor(Math.random() * colors.length)];
+        p.style.cssText = `
+            width:${size}px; height:${size}px;
+            color: ${col};
+            background: ${p.classList.contains('plus') ? 'transparent' : col};
+            left:${Math.random()*100}%;
+            animation-duration:${Math.random()*15+8}s;
+            animation-delay:${Math.random()*10}s;
+        `;
+        container.appendChild(p);
+    }
+    </script>
+</body>
+</html>

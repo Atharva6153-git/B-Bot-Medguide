@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Chatbot - B Bot Medguide</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2" style="background: #a78bfa;"></div>
+    </div>
+    <div id="particles"></div>
+
+    <nav>
+        <div class="brand">🏥 B Bot Medguide</div>
+        <div class="nav-links">
+            <a href="/">💊 Medicines</a>
+            <a href="/chatbot">🤖 Chatbot</a>
+            <a href="/history">📋 History</a>
+            <a href="/skin">🖼️ Skin Check</a>
+            <a href="/hospitals">🏥 Hospitals</a>
+            <a href="/fever-ratio">📊 Fever Ratio</a>
+            <a href="/logout" class="logout">🚪 Logout</a>
+        </div>
+    </nav>
+
+    <div class="content">
+        <div class="container">
+            <h1 style="margin-bottom: 5px;">🤖 AI Medical Chatbot</h1>
+            <div class="subtitle">Instant Smart Symptom Analysis</div>
+
+            <div class="card">
+                <p style="text-align: center; margin-bottom: 25px;">Describe your symptoms below, and our advanced AI will suggest appropriate medicines and next steps based on your demographic.</p>
+                <form method="POST">
+                    <div class="form-group">
+                        <label>Your Age</label>
+                        <input type="number" name="age" placeholder="e.g. 25" required min="1" max="120">
+                    </div>
+                    <div class="form-group">
+                        <label>Symptoms Description</label>
+                        <textarea name="message" placeholder="e.g. I have a severe headache, slight fever, and body pain that started 2 days ago..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">🔍 Analyze Symptoms</button>
+                </form>
+            </div>
+
+            {% if user_message %}
+            <div class="card">
+                <div style="margin-bottom: 20px;">
+                    <h3 style="color: var(--text-muted); font-size: 1.1rem; text-transform: uppercase;">👤 Your Input</h3>
+                    <p style="font-size: 1.2rem; font-weight: 500; font-style: italic;">" {{ user_message }} "</p>
+                </div>
+
+                {% if response %}
+                <div class="response-box">
+                    <h3>🤖 AI Diagnosis & Suggestion</h3>
+                    <div style="white-space: pre-wrap;">{{ response }}</div>
+                </div>
+                
+                <div class="ambulance" style="margin-top: 25px; padding: 20px;">
+                    <h3 style="font-size: 1.2rem; margin-bottom: 5px;">🩺 Medical Advisor Notice</h3>
+                    <p style="font-size: 1rem; margin: 0;">While our system provides highly accurate preliminary insights, we strongly advise consulting a certified doctor for personalized treatment, especially if your symptoms worsen.</p>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+
+    <script>
+    const container = document.getElementById('particles');
+    const colors = ['#3b82f6', '#06b6d4', '#10b981', '#ffffff'];
+    for(let i = 0; i < 40; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        if(Math.random() > 0.5) p.classList.add('plus');
+        const size = Math.random() * 5 + 2;
+        const col = colors[Math.floor(Math.random() * colors.length)];
+        p.style.cssText = `
+            width:${size}px; height:${size}px;
+            color: ${col};
+            background: ${p.classList.contains('plus') ? 'transparent' : col};
+            left:${Math.random()*100}%;
+            animation-duration:${Math.random()*15+8}s;
+            animation-delay:${Math.random()*10}s;
+        `;
+        container.appendChild(p);
+    }
+    </script>
+</body>
+</html>

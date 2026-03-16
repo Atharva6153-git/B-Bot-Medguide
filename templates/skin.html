@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skin Infection Check - B Bot Medguide</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+    .upload-container { background: rgba(255,255,255,0.7); border-radius: 20px; padding: 40px; text-align: center; border: 2px dashed rgba(37, 99, 235, 0.3); cursor: pointer; transition: 0.3s; position: relative; overflow: hidden; }
+    .upload-container:hover { border-color: var(--primary); background: #fff; box-shadow: 0 10px 20px rgba(37,99,235,0.05); }
+    .upload-container img.preview-img { max-width: 100%; max-height: 300px; border-radius: 12px; margin-top: 20px; display: none; margin-left: auto; margin-right: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 2px solid var(--primary); }
+    .upload-content { position: relative; z-index: 2; transition: 0.3s; }
+    .upload-container.has-image .upload-content { display: none; }
+    .loading-overlay { display: none; background: rgba(255,255,255,0.9); position: absolute; inset: 0; border-radius: 20px; align-items: center; justify-content: center; flex-direction: column; z-index: 10; backdrop-filter: blur(5px); }
+</style>
+</head>
+<body>
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2" style="background: #f43f5e;"></div>
+        <div class="blob blob-3" style="background: #8b5cf6;"></div>
+    </div>
+    <div id="particles"></div>
+
+    <nav>
+        <div class="brand">🏥 B Bot Medguide</div>
+        <div class="nav-links">
+            <a href="/">💊 Medicines</a>
+            <a href="/chatbot">🤖 Chatbot</a>
+            <a href="/history">📋 History</a>
+            <a href="/skin">🖼️ Skin Check</a>
+            <a href="/hospitals">🏥 Hospitals</a>
+            <a href="/fever-ratio">📊 Fever Ratio</a>
+            <a href="/logout" class="logout">🚪 Logout</a>
+        </div>
+    </nav>
+
+    <div class="content">
+        <div class="container">
+            <h1 style="margin-bottom: 5px;">🖼️ AI Skin Analysis</h1>
+            <div class="subtitle">Computer Vision Diagnostics</div>
+
+            <div class="card" style="position: relative;">
+                <p style="text-align: center; margin-bottom: 25px;">Upload a clear photograph of your skin condition. Our advanced neural network will analyze the image and provide possible medical insights.</p>
+
+                <form method="POST" enctype="multipart/form-data" id="skinForm" onsubmit="showLoading()">
+                    <input type="file" id="imageInput" name="image" accept=".jpg,.jpeg,.png" required onchange="previewImage(this)" style="display:none;">
+                    
+                    <div class="upload-container" id="uploadContainer" onclick="document.getElementById('imageInput').click()">
+                        <div class="upload-content">
+                            <div class="upload-icon" style="font-size: 4rem; margin-bottom: 10px;">📸</div>
+                            <h3 style="color: var(--text-main); font-size: 1.3rem;">Tap to upload or drag & drop</h3>
+                            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 5px;">Supported formats: JPG, PNG, JPEG</p>
+                        </div>
+                        <img id="previewImg" class="preview-img">
+
+                        <!-- Loading Overlay inside the form area -->
+                        <div class="loading-overlay" id="loadingOverlay">
+                            <div class="spinner"></div>
+                            <p style="color: var(--primary); font-weight: 800; margin-top: 15px; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px;">Analyzing Image...</p>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block" style="margin-top: 25px;">🔍 Run Diagnosis</button>
+                </form>
+            </div>
+
+            {% if response %}
+            <div class="card" style="border-left: 4px solid var(--primary); padding-top: 30px;">
+                <h2 style="color: var(--primary); font-size: 1.8rem; margin-bottom: 20px;">🤖 Intelligence Report</h2>
+                
+                <div class="response-box" style="margin-top: 0; background: rgba(37,99,235,0.05); border: 1px solid rgba(37,99,235,0.2);">
+                    <div style="white-space: pre-wrap; font-size: 1.05rem; line-height: 1.8; color: var(--text-main);">{{ response }}</div>
+                </div>
+
+                <div class="ambulance" style="margin-top: 25px; padding: 20px;">
+                    <h3 style="font-size: 1.2rem; margin-bottom: 5px;">🩺 Medical Advisor Notice</h3>
+                    <p style="font-size: 1rem; margin: 0; color: #7f1d1d;">Our advanced computer vision models provide highly accurate preliminary diagnostics. However, if your skin condition worsens or persists, please consult a certified dermatologist immediately.</p>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+
+    <script>
+    function previewImage(input) {
+        const preview = document.getElementById('previewImg');
+        const container = document.getElementById('uploadContainer');
+        
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                container.classList.add('has-image');
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function showLoading() {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+    }
+
+    const container = document.getElementById('particles');
+    const colors = ['#3b82f6', '#06b6d4', '#10b981', '#ffffff'];
+    for(let i = 0; i < 40; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        if(Math.random() > 0.5) p.classList.add('plus');
+        const size = Math.random() * 5 + 2;
+        const col = colors[Math.floor(Math.random() * colors.length)];
+        p.style.cssText = `
+            width:${size}px; height:${size}px;
+            color: ${col};
+            background: ${p.classList.contains('plus') ? 'transparent' : col};
+            left:${Math.random()*100}%;
+            animation-duration:${Math.random()*15+8}s;
+            animation-delay:${Math.random()*10}s;
+        `;
+        container.appendChild(p);
+    }
+    </script>
+</body>
+</html>

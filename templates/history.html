@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Patient History - B Bot Medguide</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+    .record-form { background: #fff; padding: 25px; border-radius: 16px; border: 1px solid rgba(226, 232, 240, 1); box-shadow: 0 4px 6px rgba(0,0,0,0.02);}
+    .file-input-wrapper {
+        border: 2px dashed rgba(37, 99, 235, 0.3); border-radius: 12px; padding: 20px; text-align: center;
+        background: rgba(255,255,255,0.8); transition: 0.3s;
+    }
+    .file-input-wrapper:hover { border-color: var(--primary); background: #fff; }
+    input[type=file]::file-selector-button {
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        border: none; padding: 10px 20px; border-radius: 8px; color: #fff; font-weight: 700; cursor: pointer;
+        margin-right: 15px; transition: 0.3s;
+    }
+    input[type=file]::file-selector-button:hover { box-shadow: 0 4px 10px rgba(37,99,235,0.3); transform: scale(1.02); }
+</style>
+</head>
+<body>
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2" style="background: #0ea5e9;"></div>
+    </div>
+    <div id="particles"></div>
+
+    <nav>
+        <div class="brand">🏥 B Bot Medguide</div>
+        <div class="nav-links">
+            <a href="/">💊 Medicines</a>
+            <a href="/chatbot">🤖 Chatbot</a>
+            <a href="/history">📋 History</a>
+            <a href="/skin">🖼️ Skin Check</a>
+            <a href="/hospitals">🏥 Hospitals</a>
+            <a href="/fever-ratio">📊 Fever Ratio</a>
+            <a href="/logout" class="logout">🚪 Logout</a>
+        </div>
+    </nav>
+
+    <div class="content">
+        <div class="container">
+            <h1 style="margin-bottom: 5px;">📋 Medical Passport</h1>
+            <div class="subtitle">Secure Patient History Tracker</div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="card">
+                <h2 style="color: var(--primary);">📝 Add New Record</h2>
+                <div class="record-form">
+                    <form method="POST" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label>Medical Condition</label>
+                            <input type="text" name="medical_condition" placeholder="e.g. Chronic Asthma, Regular Checkup..." required>
+                        </div>
+                        <div class="form-group">
+                            <label>Clinical Notes</label>
+                            <textarea name="notes" placeholder="Detailed symptoms, prescribed medicines, doctor's advice..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Attach Documents (Lab reports, Prescriptions)</label>
+                            <div class="file-input-wrapper">
+                                <input type="file" name="file" accept=".png,.jpg,.jpeg,.pdf,.doc,.docx">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block">💾 Securely Save Record</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Health Vault</h2>
+                {% if records %}
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Condition</th>
+                                <th>Notes</th>
+                                <th>Attachment</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in records %}
+                            <tr>
+                                <td style="font-weight: 700; color: var(--text-main);">{{ record.medical_condition }}</td>
+                                <td>{{ record.notes or '—' }}</td>
+                                <td>
+                                    {% if record.file %}
+                                        <a href="/uploads/{{ record.file }}" target="_blank" class="btn" style="padding: 8px 16px; font-size: 0.85rem; background: rgba(37,99,235,0.1); border: 1px solid var(--primary); color: var(--primary);">📄 View</a>
+                                    {% else %}
+                                        <span style="color: var(--text-muted);">No File</span>
+                                    {% endif %}
+                                </td>
+                                <td style="color: var(--text-muted); font-size: 0.9rem;">{{ record.timestamp.strftime('%d %b %Y, %I:%M %p') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div style="text-align: center; padding: 40px; border: 2px dashed rgba(148, 163, 184, 0.5); border-radius: 16px; background: rgba(255,255,255,0.5);">
+                    <div style="font-size: 3rem; margin-bottom: 10px; opacity: 0.5;">📭</div>
+                    <p style="color: var(--text-muted); margin: 0; font-size: 1.1rem;">Your vault is empty. Add your first medical record above to start tracking your health journey.</p>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+    const container = document.getElementById('particles');
+    const colors = ['#3b82f6', '#06b6d4', '#10b981', '#ffffff'];
+    for(let i = 0; i < 40; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        if(Math.random() > 0.5) p.classList.add('plus');
+        const size = Math.random() * 5 + 2;
+        const col = colors[Math.floor(Math.random() * colors.length)];
+        p.style.cssText = `
+            width:${size}px; height:${size}px;
+            color: ${col};
+            background: ${p.classList.contains('plus') ? 'transparent' : col};
+            left:${Math.random()*100}%;
+            animation-duration:${Math.random()*15+8}s;
+            animation-delay:${Math.random()*10}s;
+        `;
+        container.appendChild(p);
+    }
+    </script>
+</body>
+</html>

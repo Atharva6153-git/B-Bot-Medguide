@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B Bot Medguide</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Background Elements -->
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+    <div id="particles"></div>
+
+    <!-- Navigation -->
+    <nav>
+        <div class="brand">🏥 B Bot Medguide</div>
+        <div class="nav-links">
+            <a href="/">💊 Medicines</a>
+            <a href="/chatbot">🤖 Chatbot</a>
+            <a href="/history">📋 History</a>
+            <a href="/skin">🖼️ Skin Check</a>
+            <a href="/hospitals">🏥 Hospitals</a>
+            <a href="/fever-ratio">📊 Fever Ratio</a>
+            <a href="/logout" class="logout">🚪 Logout</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="content">
+        <div class="container">
+            <h1>Welcome to Medguide</h1>
+            <div class="subtitle">Trusted & Prescribed by Specialists</div>
+
+            <div class="card">
+                <h2>🩺 Find Your Medicine</h2>
+                <p>Select your illness and age group to see recommended medicines and dosages instantly.</p>
+                <form method="POST">
+                    <div class="form-group">
+                        <label>Select Illness</label>
+                        <select name="illness" required>
+                            <option value="">-- Choose Illness --</option>
+                            {% for illness in illnesses %}
+                                <option value="{{ illness }}" {% if illness == selected_illness %}selected{% endif %}>{{ illness.title() }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Select Age Group</label>
+                        <select name="age" required>
+                            <option value="">-- Choose Age Group --</option>
+                            {% for age in age_groups %}
+                                <option value="{{ age }}" {% if age == selected_age %}selected{% endif %}>{{ age.title() }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Show Medicines</button>
+                </form>
+            </div>
+
+            <div class="medicine-list">
+                {% if medicines %}
+                    {% for med in medicines %}
+                        <div class="medicine-card {{ med.type }}">
+                            <h3>{{ med.name }}</h3>
+                            <p><strong>Dose:</strong> {{ med.dose }}</p>
+                        </div>
+                    {% endfor %}
+                    <div class="flash danger" style="margin-top:15px; margin-bottom: 0;">
+                        ⚠️ Warning: If condition worsens, consult a doctor immediately.
+                    </div>
+                {% elif selected_illness and selected_age %}
+                    <div class="card">
+                        <p class="text-center" style="margin:0;">No medicines recommended for this combination.</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Ambulance Section -->
+            <div class="ambulance">
+                <h3>🚑 Emergency Ambulance</h3>
+                <p id="ambulance-status">We will locate the nearest hospital and dispatch an ambulance to your location in emergencies.</p>
+                <button onclick="shareLocationAndFindHospital()" class="btn btn-danger" id="emergency-btn">Share My Location & Alert Ambulance</button>
+                <div id="location" style="margin-top: 15px; font-weight: bold;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+    function shareLocationAndFindHospital() {
+        const locationElem = document.getElementById('location');
+        const emergencyBtn = document.getElementById('emergency-btn');
+        const statusElem = document.getElementById('ambulance-status');
+        
+        emergencyBtn.disabled = true;
+        locationElem.innerHTML = "Fetching your location... <span class='spinner' style='width:20px;height:20px;display:inline-block;vertical-align:middle;margin-left:10px;border-width:2px;'></span>";
+        
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    
+                    locationElem.innerHTML = `✅ Location acquired. Scanning for nearest hospital... <span class='spinner' style='width:20px;height:20px;display:inline-block;vertical-align:middle;margin-left:10px;border-width:2px;'></span>`;
+                    
+                    // Use robust backend API to find nearest hospital
+                    fetch('/api/nearest_hospital', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ lat: lat, lon: lon })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        emergencyBtn.disabled = false;
+                        if (data.elements && data.elements.length > 0) {
+                            const hospital = data.elements[0];
+                            const name = hospital.tags.name || 'Nearest Medical Center';
+                            const phone = hospital.tags.phone || hospital.tags['contact:phone'] || '108'; // fallback to national ambulance if no phone listed
+                            
+                            statusElem.innerHTML = `<span style="color:var(--danger); font-size: 1.3rem; font-weight: 800;">🚨 Alert Sent to: ${name}</span><br>
+                                                   Ambulance Dispatch Number: <a href="tel:${phone}" style="font-size: 1.5rem; text-decoration: underline;">${phone}</a>`;
+                            locationElem.innerHTML = `✅ Your live location coordinates (${lat.toFixed(4)}, ${lon.toFixed(4)}) have been shared with ${name}.`;
+                            emergencyBtn.innerHTML = "Update Shared Location";
+                        } else {
+                            locationElem.innerHTML = "⚠️ No hospitals found nearby. Please dial <strong>108</strong> immediately.";
+                            statusElem.innerHTML = "Emergency Dial: <a href='tel:108'>108</a>";
+                        }
+                    })
+                    .catch(e => {
+                        emergencyBtn.disabled = false;
+                        locationElem.innerHTML = "❌ Network error. Please dial <strong>108</strong> immediately.";
+                        statusElem.innerHTML = "Emergency Dial: <a href='tel:108'>108</a>";
+                    });
+
+                },
+                (error) => { 
+                    emergencyBtn.disabled = false;
+                    locationElem.innerHTML = "❌ Unable to retrieve location. Please allow location access or dial <strong>108</strong>."; 
+                }
+            );
+        } else {
+            emergencyBtn.disabled = false;
+            locationElem.innerHTML = "❌ Geolocation is not supported by your browser. Please dial <strong>108</strong>.";
+        }
+    }
+
+    // Particle generator
+    const container = document.getElementById('particles');
+    // For light mode, let's use clinical colors for particles
+    const colors = ['#3b82f6', '#06b6d4', '#10b981', '#ffffff'];
+    for(let i = 0; i < 40; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        // Make half of them plus signs natively via CSS
+        if(Math.random() > 0.5) p.classList.add('plus');
+        
+        const size = Math.random() * 8 + 4;
+        const col = colors[Math.floor(Math.random() * colors.length)];
+        p.style.cssText = `
+            width:${size}px; height:${size}px;
+            color: ${col};
+            background: ${p.classList.contains('plus') ? 'transparent' : col};
+            left:${Math.random()*100}%;
+            animation-duration:${Math.random()*15+10}s;
+            animation-delay:${Math.random()*10}s;
+        `;
+        container.appendChild(p);
+    }
+    </script>
+</body>
+</html>

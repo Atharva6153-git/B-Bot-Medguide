@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nearby Hospitals - B Bot Medguide</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+    /* Removed the dark invert filter for light theme map */
+    #map { height: 400px; border-radius: 16px; border: 1px solid rgba(226, 232, 240, 1); box-shadow: 0 4px 15px rgba(0,0,0,0.05); z-index: 10; margin-bottom: 25px; }
+    .hospital-card { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 15px; border-left: 4px solid var(--primary); display: flex; flex-direction: column; gap: 8px; transition: 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.02);}
+    .hospital-card:hover { transform: translateX(5px); box-shadow: 0 10px 20px rgba(0,0,0,0.08); }
+    .hospital-card h3 { color: var(--text-main); margin:0; font-size: 1.3rem; font-weight: 800;}
+    .hospital-card p { margin:0; font-size: 0.95rem; color: var(--text-muted); font-weight: 500;}
+    .hospital-card a { display: inline-block; padding: 8px 16px; background: rgba(37, 99, 235, 0.1); border: 1px solid var(--primary); color: var(--primary); text-decoration: none; border-radius: 8px; font-weight: bold; width: fit-content; margin-top: 10px; transition: 0.3s; }
+    .hospital-card a:hover { background: var(--primary); color: #fff; box-shadow: 0 4px 10px rgba(37,99,235,0.3); }
+    .status { text-align: center; color: var(--primary); font-weight: bold; margin: 15px 0; font-size: 1.1rem; }
+</style>
+</head>
+<body>
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-3" style="background: #10b981;"></div>
+    </div>
+    <div id="particles"></div>
+
+    <nav>
+        <div class="brand">🏥 B Bot Medguide</div>
+        <div class="nav-links">
+            <a href="/">💊 Medicines</a>
+            <a href="/chatbot">🤖 Chatbot</a>
+            <a href="/history">📋 History</a>
+            <a href="/skin">🖼️ Skin Check</a>
+            <a href="/hospitals">🏥 Hospitals</a>
+            <a href="/fever-ratio">📊 Fever Ratio</a>
+            <a href="/logout" class="logout">🚪 Logout</a>
+        </div>
+    </nav>
+
+    <div class="content">
+        <div class="container">
+            <h1 style="margin-bottom: 5px;">🏥 Emergency Locator</h1>
+            <div class="subtitle">Find Verified Hospitals Nearby</div>
+
+            <div class="card">
+                <div style="text-align: center;">
+                    <button class="btn btn-primary" onclick="findHospitals()" style="font-size: 1.2rem; padding: 18px 40px; border-radius: 50px; margin-bottom: 10px;">
+                        📍 Scan Area for Hospitals
+                    </button>
+                    <div id="status" class="status">Click the button to scan for nearby medical centers.</div>
+                </div>
+
+                <div id="map"></div>
+
+                <div class="loading" id="loading" style="display:none; text-align: center; padding: 20px;">
+                    <div class="spinner"></div>
+                    <p style="margin-top: 15px; color: var(--primary); font-weight: bold; letter-spacing: 1px;">SATELLITE SCAN IN PROGRESS...</p>
+                </div>
+
+                <div class="hospital-list" id="hospitalList"></div>
+
+                <div class="ambulance" style="margin-top: 30px;">
+                    <h3 style="font-size: 1.4rem; margin-bottom: 10px;">🚨 National Emergency Hotline</h3>
+                    <p style="font-size: 1.1rem; margin: 0;">In case of severe emergency, dial <strong style="font-size: 1.4rem;">108</strong> (Ambulance) or <strong style="font-size: 1.4rem;">102</strong> (Medical Helpline) immediately.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    var map = null;
+    var userMarker = null;
+    var hospitalMarkers = [];
+
+    function initMap() {
+        map = L.map('map').setView([20.5937, 78.9629], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+    }
+
+    initMap();
+
+    function findHospitals() {
+        const status = document.getElementById('status');
+        const loading = document.getElementById('loading');
+        const hospitalList = document.getElementById('hospitalList');
+
+        status.innerHTML = 'Establishing GPS uplink...';
+        loading.style.display = 'block';
+        hospitalList.innerHTML = '';
+
+        hospitalMarkers.forEach(m => map.removeLayer(m));
+        hospitalMarkers = [];
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+
+                    map.setView([lat, lon], 14);
+
+                    if (userMarker) map.removeLayer(userMarker);
+                    userMarker = L.marker([lat, lon], {
+                        icon: L.divIcon({ html: '📍', className: '', iconSize: [30, 30] })
+                    }).addTo(map).bindPopup('<b>Current Target Origin</b>').openPopup();
+
+                    status.innerHTML = 'Scanning 5km radius via OpenStreetMap...';
+
+                    const query = `
+                        [out:json][timeout:25];
+                        (
+                            node["amenity"="hospital"](around:5000,${lat},${lon});
+                            node["amenity"="clinic"](around:5000,${lat},${lon});
+                            node["healthcare"="hospital"](around:5000,${lat},${lon});
+                        );
+                        out body;
+                    `;
+
+                    fetch('https://overpass-api.de/api/interpreter', {
+                        method: 'POST',
+                        body: query
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        loading.style.display = 'none';
+
+                        if (data.elements.length === 0) {
+                            status.innerHTML = '❌ No medical centers detected in the immediate vicinity.';
+                            return;
+                        }
+
+                        status.innerHTML = `✅ Successfully mapped ${data.elements.length} nearby medical centers.`;
+
+                        data.elements.forEach((hospital) => {
+                            if (!hospital.lat || !hospital.lon) return;
+
+                            const name = hospital.tags.name || 'Unknown Facility';
+                            const phone = hospital.tags.phone || hospital.tags['contact:phone'] || 'Unlisted';
+                            const address = hospital.tags['addr:street'] || hospital.tags['addr:full'] || 'GPS Coordinates Provided';
+
+                            const marker = L.marker([hospital.lat, hospital.lon], {
+                                icon: L.divIcon({ html: '🏥', className: '', iconSize: [30, 30] })
+                            }).addTo(map).bindPopup(`<b>${name}</b><br>📞 ${phone}<br>📍 ${address}`);
+                            hospitalMarkers.push(marker);
+
+                            const distance = getDistance(lat, lon, hospital.lat, hospital.lon);
+                            hospitalList.innerHTML += `
+                                <div class="hospital-card">
+                                    <h3>${name}</h3>
+                                    <p>📍 ${address}</p>
+                                    <p>📞 ${phone}</p>
+                                    <p>📏 ${distance} km away</p>
+                                    <a href="https://www.openstreetmap.org/directions?from=${lat},${lon}&to=${hospital.lat},${hospital.lon}" target="_blank">🗺️ Navigate</a>
+                                </div>
+                            `;
+                        });
+                    })
+                    .catch(err => {
+                        loading.style.display = 'none';
+                        status.innerHTML = '❌ Sensor link failed. OpenStreetMap API unresponsive.';
+                    });
+                },
+                (error) => {
+                    loading.style.display = 'none';
+                    status.innerHTML = '❌ Access Denied: GPS coordinates could not be retrieved.';
+                }
+            );
+        } else {
+            loading.style.display = 'none';
+            status.innerHTML = '❌ Geolocation protocol not supported by this unit.';
+        }
+    }
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return (R * c).toFixed(1);
+    }
+
+    const container = document.getElementById('particles');
+    const colors = ['#3b82f6', '#06b6d4', '#10b981', '#ffffff'];
+    for(let i = 0; i < 40; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        if(Math.random() > 0.5) p.classList.add('plus');
+        const size = Math.random() * 5 + 2;
+        const col = colors[Math.floor(Math.random() * colors.length)];
+        p.style.cssText = `
+            width:${size}px; height:${size}px;
+            color: ${col};
+            background: ${p.classList.contains('plus') ? 'transparent' : col};
+            left:${Math.random()*100}%;
+            animation-duration:${Math.random()*15+8}s;
+            animation-delay:${Math.random()*10}s;
+        `;
+        container.appendChild(p);
+    }
+    </script>
+</body>
+</html>
