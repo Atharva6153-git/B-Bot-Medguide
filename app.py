@@ -23,7 +23,7 @@ import certifi
 mongo_client = MongoClient(
     os.getenv("MONGO_URI"),
     tlsCAFile=certifi.where(),
-    serverSelectionTimeoutMS=30000
+    serverSelectionTimeoutMS=5000
 )
 db = mongo_client['medguide']
 users_collection = db['users']
