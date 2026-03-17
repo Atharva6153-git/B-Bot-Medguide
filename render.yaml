@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: b-bot-medguide
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
