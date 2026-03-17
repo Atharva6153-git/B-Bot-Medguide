@@ -6,3 +6,4 @@ groq
 dnspython
 python-dotenv
 certifi
+gunicorn
