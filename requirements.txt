@@ -6,4 +6,4 @@ groq
 dnspython
 python-dotenv
 certifi
-gunicorn
+gunicorn==25.1.0
