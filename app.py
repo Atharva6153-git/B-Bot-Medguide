@@ -320,91 +320,90 @@ def skin():
 
     return render_template('skin.html', response=response)
 
+import json as json_module
+
+DISEASE_COLORS = [
+    "#4CAF50", "#FF5722", "#FF9800", "#9C27B0", "#2196F3",
+    "#00BCD4", "#F44336", "#795548", "#607D8B", "#E91E63"
+]
+
 @app.route('/fever-ratio', methods=['GET', 'POST'])
 def fever_ratio():
     if 'user' not in session:
         return redirect(url_for('login'))
 
-    all_ratios = {
-        "Viral Fever": {
-            "probability": 55, "color": "#4CAF50",
-            "description": "Most common cause of fever. Usually resolves in 3-5 days.",
-            "keywords": ["fever", "cold", "runny nose", "mild", "cough", "sneezing"],
-            "warning_signs": [
-                ("Fever above 103°F / 39.4°C",        "Seek medical attention"),
-                ("Fever lasting more than 3 days",     "Doctor visit required"),
-                ("Mild fever + runny nose + fatigue",  "Rest + paracetamol"),
-                ("Difficulty breathing",               "Emergency care immediately"),
-            ],
-            "action": "Rest, stay hydrated, take paracetamol. Consult doctor if fever persists beyond 3 days."
-        },
-        "Dengue": {
-            "probability": 20, "color": "#FF5722",
-            "description": "Caused by mosquito bite. Watch for rash and low platelet count.",
-            "keywords": ["rash", "dengue", "mosquito", "platelet", "eye pain", "joint pain"],
-            "warning_signs": [
-                ("Severe headache + rash",             "Visit hospital immediately"),
-                ("Pain behind the eyes",               "Dengue blood test required"),
-                ("Bleeding gums / nose bleed",         "Emergency — platelet drop"),
-                ("Sudden high fever (104°F+) + rash",  "Hospitalisation required"),
-            ],
-            "action": "No aspirin/ibuprofen. Get CBC blood test. Hospital if platelet count drops below 100k."
-        },
-        "Malaria": {
-            "probability": 15, "color": "#FF9800",
-            "description": "Caused by Plasmodium parasite via mosquito. Recurring chills common.",
-            "keywords": ["chills", "malaria", "shivering", "sweating", "recurring", "mosquito"],
-            "warning_signs": [
-                ("Recurring chills every 48–72 hours", "Blood smear / RDT test"),
-                ("High fever + heavy sweating",        "Anti-malarial medication"),
-                ("Confusion or seizures",              "Emergency care immediately"),
-                ("Yellowing of skin or eyes",          "Hospital visit required"),
-            ],
-            "action": "Get rapid diagnostic test (RDT). Prescribed anti-malarials are essential. Do not self-medicate."
-        },
-        "Typhoid": {
-            "probability": 7, "color": "#9C27B0",
-            "description": "Bacterial infection via contaminated food/water. Persistent high fever.",
-            "keywords": ["typhoid", "stomach", "abdominal", "diarrhea", "constipation", "food"],
-            "warning_signs": [
-                ("Rose-colored spots on chest/abdomen", "Stool/blood culture test"),
-                ("Persistent high fever for 1+ week",   "Antibiotic course required"),
-                ("Severe abdominal pain",               "Hospital admission needed"),
-                ("Constipation followed by diarrhea",   "Widal / blood culture test"),
-            ],
-            "action": "Typhoid Widal test or blood culture. Antibiotics (ciprofloxacin / azithromycin) as prescribed by doctor."
-        },
-        "COVID-19": {
-            "probability": 3, "color": "#2196F3",
-            "description": "Viral infection. May include loss of smell/taste, breathlessness.",
-            "keywords": ["covid", "smell", "taste", "breathless", "oxygen", "corona"],
-            "warning_signs": [
-                ("Loss of taste / smell",              "RT-PCR test & isolate"),
-                ("Breathlessness or low oxygen SpO2",  "Emergency — check SpO2 level"),
-                ("Persistent chest pain",              "Hospital immediately"),
-                ("High fever + dry cough + fatigue",   "Isolate + antigen test"),
-            ],
-            "action": "Isolate immediately. Get RT-PCR or antigen test. Monitor oxygen (SpO2 > 94%). Call 108 if breathless."
-        },
-    }
-
     ratios = {}
     symptoms = None
+    ai_error = None
 
     if request.method == 'POST':
-        symptoms = request.form.get('symptoms', '').lower()
-        symptom_words = [s.strip() for s in symptoms.replace(',', ' ').split()]
+        symptoms = request.form.get('symptoms', '').strip()
 
-        for illness, data in all_ratios.items():
-            for keyword in data['keywords']: # type: ignore
-                if any(keyword in word or word in keyword for word in symptom_words):
-                    ratios[illness] = data
-                    break
+        ai_prompt = f"""You are an expert medical diagnostic AI. A patient reports the following symptoms: "{symptoms}"
 
-        if not ratios:
+Analyze these symptoms and return a JSON object listing the most likely diseases/conditions that could cause these symptoms, with probability percentages that SUM EXACTLY TO 100.
+
+Return ONLY a valid JSON object (no markdown, no explanation) in this exact format:
+{{
+  "diseases": [
+    {{
+      "name": "Disease Name",
+      "probability": <integer 1-100>,
+      "description": "One-sentence description of this disease related to the given symptoms.",
+      "warning_signs": [
+        ["Symptom combination to watch", "Immediate action to take"],
+        ["Symptom combination to watch", "Immediate action to take"],
+        ["Symptom combination to watch", "Immediate action to take"]
+      ],
+      "action": "Specific recommended action for this disease based on the symptoms given."
+    }}
+  ]
+}}
+
+Rules:
+- Include only diseases genuinely relevant to the given symptoms (minimum 2, maximum 6).
+- Probabilities must be realistic and based on symptom overlap, not random.
+- All probabilities must sum to exactly 100.
+- warning_signs must be 3-4 entries, each an array of exactly 2 strings: [symptom_combo, action].
+- Do NOT include any text outside the JSON object."""
+
+        try:
+            result = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": ai_prompt}],
+                temperature=0.3,
+                max_tokens=1500
+            )
+            raw = result.choices[0].message.content.strip()
+
+            # Strip markdown code fences if present
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            raw = raw.strip()
+
+            parsed = json_module.loads(raw)
+            diseases = parsed.get("diseases", [])
+
+            for i, disease in enumerate(diseases):
+                color = DISEASE_COLORS[i % len(DISEASE_COLORS)]
+                name = disease.get("name", "Unknown")
+                ratios[name] = {
+                    "probability": disease.get("probability", 0),
+                    "color": color,
+                    "description": disease.get("description", ""),
+                    "warning_signs": [
+                        (ws[0], ws[1]) for ws in disease.get("warning_signs", [])
+                    ],
+                    "action": disease.get("action", "")
+                }
+
+        except Exception as e:
+            ai_error = f"AI analysis failed: {str(e)}. Please try again."
             ratios = {}
 
-    return render_template('fever_ratio.html', ratios=ratios, symptoms=symptoms)
+    return render_template('fever_ratio.html', ratios=ratios, symptoms=symptoms, ai_error=ai_error)
 
 @app.route('/hospitals')
 def hospitals():

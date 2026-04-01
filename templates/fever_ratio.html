@@ -11,6 +11,17 @@
     .illness-name { font-size: 1.3rem; color: var(--text-main); text-transform: uppercase; letter-spacing: 1px; }
     .percent-value { font-size: 1.5rem; }
     .description { margin-top: 15px; color: var(--text-muted); font-size: 1rem; }
+    /* Loading overlay */
+    #ai-loading { display: none; position: fixed; inset: 0; background: rgba(10,10,30,0.75); backdrop-filter: blur(6px); z-index: 9999; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+    #ai-loading.show { display: flex; }
+    .spinner { width: 64px; height: 64px; border: 6px solid rgba(255,255,255,0.15); border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ai-loading-text { color: #fff; font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; }
+    .ai-loading-sub { color: rgba(255,255,255,0.6); font-size: 0.9rem; }
+    /* AI badge */
+    .ai-badge { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg,#3b82f6,#8b5cf6); color:#fff; font-size: 0.78rem; font-weight: 700; padding: 4px 12px; border-radius: 20px; letter-spacing: 0.5px; margin-bottom: 18px; }
+    /* Error card */
+    .error-card { background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.35); border-radius: 14px; padding: 20px 24px; color: #f43f5e; font-weight: 600; margin-top: 20px; }
 </style>
 </head>
 <body>
@@ -36,18 +47,22 @@
     <div class="content">
         <div class="container">
             <h1 style="margin-bottom: 5px;">🌡️ Fever Probability Finder</h1>
-            <div class="subtitle">AI-Driven Fever Analysis</div>
+            <div class="subtitle">AI-Powered Symptom Analysis</div>
 
             <div class="card">
-                <p style="text-align: center; margin-bottom: 25px;">Enter your exact symptoms separated by commas. Our algorithm computes the probability ratio of different types of fever.</p>
-                <form method="POST">
+                <p style="text-align: center; margin-bottom: 25px;">Describe your symptoms in detail. Our AI will analyse them and calculate the probability of each relevant disease — tailored specifically to what you're experiencing.</p>
+                <form method="POST" id="fever-form">
                     <div class="form-group">
-                        <input type="text" name="symptoms" placeholder="e.g. fever, headache, body pain, chills, rash..." 
+                        <input type="text" name="symptoms" placeholder="e.g. high fever, severe headache, joint pain, rash, chills..." 
                             value="{{ symptoms or '' }}" required style="font-size: 1.2rem; padding: 20px;">
                     </div>
-                    <button type="submit" class="btn btn-primary btn-block">🔍 Calculate Fever Ratio</button>
+                    <button type="submit" class="btn btn-primary btn-block">🔍 Analyse with AI</button>
                 </form>
             </div>
+
+            {% if ai_error %}
+            <div class="error-card">⚠️ {{ ai_error }}</div>
+            {% endif %}
 
             {% if ratios %}
             <div class="card">
@@ -70,15 +85,15 @@
                 {% endfor %}
 
                 <div class="ambulance" style="margin-top: 25px; padding: 20px;">
-                    <h3 style="font-size: 1.2rem; margin-bottom: 5px;">🚨 High Fever Warning</h3>
-                    <p style="font-size: 1rem; margin: 0;">If your fever exceeds 102°F or persists for more than 3 days, seek emergency medical care immediately.</p>
+                    <h3 style="font-size: 1.2rem; margin-bottom: 5px;">🚨 Important Medical Disclaimer</h3>
+                    <p style="font-size: 1rem; margin: 0;">This is an AI-generated analysis for informational purposes only. Always consult a qualified doctor for proper diagnosis and treatment. If your fever exceeds 102°F or persists for more than 3 days, seek emergency medical care immediately.</p>
                 </div>
             </div>
-            {% elif symptoms %}
+            {% elif symptoms and not ai_error %}
             <div class="card">
                 <div class="ambulance" style="text-align: left; padding: 25px;">
-                    <h3 style="font-size: 1.4rem;">❌ No Matches Found</h3>
-                    <p style="margin:0;">We couldn't confidently match probabilities for your symptoms. Please try keywords like 'fever', 'chills', 'rash', 'joint pain'.</p>
+                    <h3 style="font-size: 1.4rem;">⚠️ No Diseases Identified</h3>
+                    <p style="margin:0;">The AI could not identify any likely diseases from the symptoms entered. Please provide more detail — for example: "high fever, severe headache, body pain, chills, rash on arms".</p>
                 </div>
             </div>
             {% endif %}
@@ -125,7 +140,20 @@
         </div>
     </div>
 
+    <!-- AI Loading Overlay -->
+    <div id="ai-loading">
+        <div class="spinner"></div>
+        <div class="ai-loading-text">🤖 AI is analysing your symptoms…</div>
+        <div class="ai-loading-sub">This may take a few seconds</div>
+    </div>
+
     <script>
+    // Show loading overlay on form submit
+    document.getElementById('fever-form').addEventListener('submit', function() {
+        document.getElementById('ai-loading').classList.add('show');
+    });
+
+    // Particles
     const container = document.getElementById('particles');
     const colors = ['#3b82f6', '#06b6d4', '#10b981', '#ffffff'];
     for(let i = 0; i < 40; i++) {
