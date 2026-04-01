@@ -32,7 +32,8 @@ history_collection = db['patient_history']
 bcrypt = Bcrypt(app)
 
 # ── File Upload Config ──
-UPLOAD_FOLDER = 'uploads'
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)   # auto-create the folder if it doesn't exist
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf', 'doc', 'docx'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -189,9 +190,41 @@ def history():
     records = list(history_collection.find({'user_id': session['user']}).sort('timestamp', -1))
     return render_template('history.html', records=records)
 
-@app.route('/uploads/<filename>')
+@app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    try:
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=False)
+    except FileNotFoundError:
+        flash('File not found. It may have been deleted.', 'danger')
+        return redirect(url_for('history'))
+
+@app.route('/delete_record/<record_id>', methods=['POST'])
+def delete_record(record_id):
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    try:
+        record = history_collection.find_one({
+            '_id': ObjectId(record_id),
+            'user_id': session['user']   # ensure users can only delete their own records
+        })
+
+        if record:
+            # Delete the physical file if it exists
+            if record.get('file'):
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], record['file'])
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+
+            history_collection.delete_one({'_id': ObjectId(record_id)})
+            flash('Record deleted successfully!', 'success')
+        else:
+            flash('Record not found or access denied.', 'danger')
+
+    except Exception as e:
+        flash(f'Error deleting record: {str(e)}', 'danger')
+
+    return redirect(url_for('history'))
 
 @app.route('/chatbot', methods=['GET', 'POST'])
 def chatbot():
@@ -293,11 +326,66 @@ def fever_ratio():
         return redirect(url_for('login'))
 
     all_ratios = {
-        "Viral Fever":  {"probability": 55, "color": "#4CAF50", "description": "Most common cause of fever. Usually resolves in 3-5 days.", "keywords": ["fever", "cold", "runny nose", "mild", "cough", "sneezing"]},
-        "Dengue":       {"probability": 20, "color": "#FF5722", "description": "Caused by mosquito bite. Watch for rash and low platelet count.", "keywords": ["rash", "dengue", "mosquito", "platelet", "eye pain", "joint pain"]},
-        "Malaria":      {"probability": 15, "color": "#FF9800", "description": "Caused by Plasmodium parasite via mosquito. Recurring chills common.", "keywords": ["chills", "malaria", "shivering", "sweating", "recurring", "mosquito"]},
-        "Typhoid":      {"probability": 7,  "color": "#9C27B0", "description": "Bacterial infection via contaminated food/water. Persistent high fever.", "keywords": ["typhoid", "stomach", "abdominal", "diarrhea", "constipation", "food"]},
-        "COVID-19":     {"probability": 3,  "color": "#2196F3", "description": "Viral infection. May include loss of smell/taste, breathlessness.", "keywords": ["covid", "smell", "taste", "breathless", "oxygen", "corona"]},
+        "Viral Fever": {
+            "probability": 55, "color": "#4CAF50",
+            "description": "Most common cause of fever. Usually resolves in 3-5 days.",
+            "keywords": ["fever", "cold", "runny nose", "mild", "cough", "sneezing"],
+            "warning_signs": [
+                ("Fever above 103°F / 39.4°C",        "Seek medical attention"),
+                ("Fever lasting more than 3 days",     "Doctor visit required"),
+                ("Mild fever + runny nose + fatigue",  "Rest + paracetamol"),
+                ("Difficulty breathing",               "Emergency care immediately"),
+            ],
+            "action": "Rest, stay hydrated, take paracetamol. Consult doctor if fever persists beyond 3 days."
+        },
+        "Dengue": {
+            "probability": 20, "color": "#FF5722",
+            "description": "Caused by mosquito bite. Watch for rash and low platelet count.",
+            "keywords": ["rash", "dengue", "mosquito", "platelet", "eye pain", "joint pain"],
+            "warning_signs": [
+                ("Severe headache + rash",             "Visit hospital immediately"),
+                ("Pain behind the eyes",               "Dengue blood test required"),
+                ("Bleeding gums / nose bleed",         "Emergency — platelet drop"),
+                ("Sudden high fever (104°F+) + rash",  "Hospitalisation required"),
+            ],
+            "action": "No aspirin/ibuprofen. Get CBC blood test. Hospital if platelet count drops below 100k."
+        },
+        "Malaria": {
+            "probability": 15, "color": "#FF9800",
+            "description": "Caused by Plasmodium parasite via mosquito. Recurring chills common.",
+            "keywords": ["chills", "malaria", "shivering", "sweating", "recurring", "mosquito"],
+            "warning_signs": [
+                ("Recurring chills every 48–72 hours", "Blood smear / RDT test"),
+                ("High fever + heavy sweating",        "Anti-malarial medication"),
+                ("Confusion or seizures",              "Emergency care immediately"),
+                ("Yellowing of skin or eyes",          "Hospital visit required"),
+            ],
+            "action": "Get rapid diagnostic test (RDT). Prescribed anti-malarials are essential. Do not self-medicate."
+        },
+        "Typhoid": {
+            "probability": 7, "color": "#9C27B0",
+            "description": "Bacterial infection via contaminated food/water. Persistent high fever.",
+            "keywords": ["typhoid", "stomach", "abdominal", "diarrhea", "constipation", "food"],
+            "warning_signs": [
+                ("Rose-colored spots on chest/abdomen", "Stool/blood culture test"),
+                ("Persistent high fever for 1+ week",   "Antibiotic course required"),
+                ("Severe abdominal pain",               "Hospital admission needed"),
+                ("Constipation followed by diarrhea",   "Widal / blood culture test"),
+            ],
+            "action": "Typhoid Widal test or blood culture. Antibiotics (ciprofloxacin / azithromycin) as prescribed by doctor."
+        },
+        "COVID-19": {
+            "probability": 3, "color": "#2196F3",
+            "description": "Viral infection. May include loss of smell/taste, breathlessness.",
+            "keywords": ["covid", "smell", "taste", "breathless", "oxygen", "corona"],
+            "warning_signs": [
+                ("Loss of taste / smell",              "RT-PCR test & isolate"),
+                ("Breathlessness or low oxygen SpO2",  "Emergency — check SpO2 level"),
+                ("Persistent chest pain",              "Hospital immediately"),
+                ("High fever + dry cough + fatigue",   "Isolate + antigen test"),
+            ],
+            "action": "Isolate immediately. Get RT-PCR or antigen test. Monitor oxygen (SpO2 > 94%). Call 108 if breathless."
+        },
     }
 
     ratios = {}
@@ -337,70 +425,61 @@ def nearest_hospital():
     except (TypeError, ValueError):
         return {"error": "Invalid coordinates"}, 400
 
+    # Broad query — catches hospitals, clinics, doctors, pharmacies within 5 km
     query = f"""
-        [out:json][timeout:10];
+        [out:json][timeout:30];
         (
-            node["amenity"="hospital"](around:10000,{lat},{lon});
-            node["amenity"="clinic"](around:10000,{lat},{lon});
+            node["amenity"="hospital"](around:5000,{lat},{lon});
+            way["amenity"="hospital"](around:5000,{lat},{lon});
+            node["amenity"="clinic"](around:5000,{lat},{lon});
+            way["amenity"="clinic"](around:5000,{lat},{lon});
+            node["amenity"="doctors"](around:5000,{lat},{lon});
+            node["healthcare"="hospital"](around:5000,{lat},{lon});
+            node["healthcare"="clinic"](around:5000,{lat},{lon});
         );
-        out body limit 1;
+        out center 30;
     """
 
-    try:
-        req = urllib.request.Request(
-            'https://overpass-api.de/api/interpreter', 
-            data=query.encode('utf-8'), 
-            headers={'Content-Type': 'application/x-www-form-urlencoded'}
-        )
-        with urllib.request.urlopen(req, timeout=12) as response:
-            res_data = json.loads(response.read().decode('utf-8'))
-            if res_data.get('elements') and len(res_data['elements']) > 0:
-                return res_data
-    except Exception as e:
-        print(f"Overpass API failed: {e}")
-
-    # Fallback Database
-    FALLBACK_HOSPITALS = [
-        {"name": "Apollo Hospitals", "lat": 19.033, "lon": 73.029, "phone": "+91-22-3350-3350"},
-        {"name": "Fortis Hospital", "lat": 28.6139, "lon": 77.2090, "phone": "+91-11-4713-5000"},
-        {"name": "Manipal Hospital", "lat": 12.9716, "lon": 77.5946, "phone": "1800-102-5555"},
-        {"name": "KEM Hospital", "lat": 19.0028, "lon": 72.8419, "phone": "+91-22-2410-7000"},
-        {"name": "AIIMS", "lat": 28.5659, "lon": 77.2089, "phone": "+91-11-2658-8500"},
-        {"name": "Safdarjung Hospital", "lat": 28.5684, "lon": 77.2057, "phone": "+91-11-2616-5060"},
-        {"name": "Narayana Health", "lat": 12.8154, "lon": 77.6921, "phone": "1860-208-0208"},
-        {"name": "CMC Vellore", "lat": 12.9248, "lon": 79.1350, "phone": "+91-416-228-1000"}
+    # Try multiple Overpass API mirrors in order
+    MIRRORS = [
+        'https://overpass-api.de/api/interpreter',
+        'https://lz4.overpass-api.de/api/interpreter',
+        'https://z.overpass-api.de/api/interpreter',
+        'https://overpass.karte.io/api/interpreter',
     ]
 
-    def get_dist(hlat, hlon):
-        R = 6371
-        dlat = math.radians(hlat - lat)
-        dlon = math.radians(hlon - lon)
-        a = math.sin(dlat/2) * math.sin(dlat/2) + math.cos(math.radians(lat)) * math.cos(math.radians(hlat)) * math.sin(dlon/2) * math.sin(dlon/2)
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-        return R * c
-
-    FALLBACK_HOSPITALS.sort(key=lambda h: get_dist(h["lat"], h["lon"]))
-    nearest = FALLBACK_HOSPITALS[0]
-    
-    if get_dist(nearest["lat"], nearest["lon"]) > 100:
-        nearest = {
-            "name": "City Central Emergency Care",
-            "lat": lat + 0.01,
-            "lon": lon + 0.01,
-            "phone": "108"
-        }
-
-    fallback_data = {
-        "elements": [
-            {
-                "tags": {
-                    "name": nearest["name"],
-                    "phone": nearest["phone"]
+    for mirror in MIRRORS:
+        try:
+            req = urllib.request.Request(
+                mirror,
+                data=query.encode('utf-8'),
+                headers={
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'User-Agent': 'BotMedguide/1.0'
                 }
-            }
-        ]
-    }
-    return fallback_data
+            )
+            with urllib.request.urlopen(req, timeout=25) as response:
+                res_data = json.loads(response.read().decode('utf-8'))
+                elements = res_data.get('elements', [])
+                # Normalise 'way' elements: they have center lat/lon instead of direct lat/lon
+                normalised = []
+                for el in elements:
+                    if el.get('lat') and el.get('lon'):
+                        normalised.append(el)
+                    elif el.get('center'):
+                        el['lat'] = el['center']['lat']
+                        el['lon'] = el['center']['lon']
+                        normalised.append(el)
+                if normalised:
+                    print(f"Overpass success via {mirror}: {len(normalised)} results")
+                    return {"elements": normalised}
+        except Exception as e:
+            print(f"Overpass mirror {mirror} failed: {e}")
+            continue
+
+    # ── All mirrors failed — return failure signal, no fake data ──
+    print("All Overpass mirrors failed — returning api_failed")
+    return {"elements": [], "api_failed": True}
 
 if __name__ == '__main__':
     app.run(debug=True)

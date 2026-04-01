@@ -91,6 +91,15 @@
 
     <!-- Scripts -->
     <script>
+    function haversineKm(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 +
+                  Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
     function shareLocationAndFindHospital() {
         const locationElem = document.getElementById('location');
         const emergencyBtn = document.getElementById('emergency-btn');
@@ -99,55 +108,89 @@
         emergencyBtn.disabled = true;
         locationElem.innerHTML = "Fetching your location... <span class='spinner' style='width:20px;height:20px;display:inline-block;vertical-align:middle;margin-left:10px;border-width:2px;'></span>";
         
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const lat = position.coords.latitude;
-                    const lon = position.coords.longitude;
-                    
-                    locationElem.innerHTML = `✅ Location acquired. Scanning for nearest hospital... <span class='spinner' style='width:20px;height:20px;display:inline-block;vertical-align:middle;margin-left:10px;border-width:2px;'></span>`;
-                    
-                    // Use robust backend API to find nearest hospital
-                    fetch('/api/nearest_hospital', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ lat: lat, lon: lon })
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        emergencyBtn.disabled = false;
-                        if (data.elements && data.elements.length > 0) {
-                            const hospital = data.elements[0];
-                            const name = hospital.tags.name || 'Nearest Medical Center';
-                            const phone = hospital.tags.phone || hospital.tags['contact:phone'] || '108'; // fallback to national ambulance if no phone listed
-                            
-                            statusElem.innerHTML = `<span style="color:var(--danger); font-size: 1.3rem; font-weight: 800;">🚨 Alert Sent to: ${name}</span><br>
-                                                   Ambulance Dispatch Number: <a href="tel:${phone}" style="font-size: 1.5rem; text-decoration: underline;">${phone}</a>`;
-                            locationElem.innerHTML = `✅ Your live location coordinates (${lat.toFixed(4)}, ${lon.toFixed(4)}) have been shared with ${name}.`;
-                            emergencyBtn.innerHTML = "Update Shared Location";
-                        } else {
-                            locationElem.innerHTML = "⚠️ No hospitals found nearby. Please dial <strong>108</strong> immediately.";
-                            statusElem.innerHTML = "Emergency Dial: <a href='tel:108'>108</a>";
-                        }
-                    })
-                    .catch(e => {
-                        emergencyBtn.disabled = false;
-                        locationElem.innerHTML = "❌ Network error. Please dial <strong>108</strong> immediately.";
-                        statusElem.innerHTML = "Emergency Dial: <a href='tel:108'>108</a>";
-                    });
-
-                },
-                (error) => { 
-                    emergencyBtn.disabled = false;
-                    locationElem.innerHTML = "❌ Unable to retrieve location. Please allow location access or dial <strong>108</strong>."; 
-                }
-            );
-        } else {
+        if (!navigator.geolocation) {
             emergencyBtn.disabled = false;
             locationElem.innerHTML = "❌ Geolocation is not supported by your browser. Please dial <strong>108</strong>.";
+            return;
         }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                
+                locationElem.innerHTML = `✅ Location acquired (${lat.toFixed(4)}, ${lon.toFixed(4)}). Scanning for nearest hospital... <span class='spinner' style='width:20px;height:20px;display:inline-block;vertical-align:middle;margin-left:10px;border-width:2px;'></span>`;
+                
+                fetch('/api/nearest_hospital', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat: lat, lon: lon })
+                })
+                .then(res => {
+                    if (!res.ok) throw new Error('Server error');
+                    return res.json();
+                })
+                .then(data => {
+                    emergencyBtn.disabled = false;
+
+                    // All Overpass mirrors down — show emergency number only
+                    if (data.api_failed) {
+                        locationElem.innerHTML = "⚠️ Hospital scan service is currently unavailable.";
+                        statusElem.innerHTML = `<span style="color:var(--danger);font-size:1.2rem;font-weight:800;">🚨 Please call emergency services immediately:</span><br>
+                            <a href="tel:108" style="font-size:2rem;font-weight:900;text-decoration:underline;">108</a> &nbsp; (Ambulance) &nbsp;|
+                            <a href="tel:102" style="font-size:2rem;font-weight:900;text-decoration:underline;">102</a> (Medical Helpline)`;
+                        emergencyBtn.innerHTML = "🔄 Try Again";
+                        return;
+                    }
+
+                    if (!data.elements || data.elements.length === 0) {
+                        locationElem.innerHTML = "⚠️ No hospitals found within 5 km. Please dial <strong>108</strong> immediately.";
+                        statusElem.innerHTML = "Emergency Dial: <a href='tel:108' style='font-size:1.4rem;font-weight:800;'>108</a>";
+                        emergencyBtn.innerHTML = "🔄 Try Again";
+                        return;
+                    }
+
+                    // Pick the CLOSEST hospital by actual distance
+                    let nearest = null;
+                    let minDist = Infinity;
+                    data.elements.forEach(el => {
+                        if (!el.lat || !el.lon) return;
+                        const d = haversineKm(lat, lon, el.lat, el.lon);
+                        if (d < minDist) { minDist = d; nearest = el; }
+                    });
+
+                    if (!nearest) {
+                        locationElem.innerHTML = "⚠️ Could not determine nearest hospital. Dial <strong>108</strong>.";
+                        return;
+                    }
+
+                    const name  = (nearest.tags && nearest.tags.name)  || 'Nearest Medical Center';
+                    const phone = (nearest.tags && (nearest.tags.phone || nearest.tags['contact:phone'])) || '108';
+                    const distStr = minDist < Infinity ? ` · ${minDist.toFixed(1)} km away` : '';
+
+                    statusElem.innerHTML = `
+                        <span style="color:var(--danger);font-size:1.3rem;font-weight:800;">🚨 Nearest Hospital: ${name}${distStr}</span><br>
+                        Ambulance / Emergency: <a href="tel:${phone}" style="font-size:1.5rem;text-decoration:underline;font-weight:800;">${phone}</a>`;
+                    locationElem.innerHTML = `✅ Location locked (${lat.toFixed(4)}, ${lon.toFixed(4)}). Call the number above to dispatch an ambulance.`;
+                    emergencyBtn.innerHTML = "🔄 Refresh Location";
+                })
+                .catch(() => {
+                    emergencyBtn.disabled = false;
+                    locationElem.innerHTML = "❌ Network error finding hospital. Please dial <strong>108</strong> immediately.";
+                    statusElem.innerHTML = "Emergency Dial: <a href='tel:108' style='font-size:1.4rem;font-weight:800;'>108</a>";
+                });
+            },
+            (error) => {
+                emergencyBtn.disabled = false;
+                const msgs = {
+                    1: "❌ Location permission denied. Please allow location access in your browser, then try again.",
+                    2: "❌ Location unavailable. Please dial <strong>108</strong> immediately.",
+                    3: "❌ Location request timed out. Please try again or dial <strong>108</strong>."
+                };
+                locationElem.innerHTML = msgs[error.code] || "❌ Unable to retrieve location. Please dial <strong>108</strong>.";
+            },
+            { timeout: 10000, maximumAge: 0, enableHighAccuracy: true }
+        );
     }
 
     // Particle generator

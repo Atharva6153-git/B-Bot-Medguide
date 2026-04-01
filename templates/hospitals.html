@@ -110,30 +110,32 @@
 
                     status.innerHTML = 'Scanning 5km radius via OpenStreetMap...';
 
-                    const query = `
-                        [out:json][timeout:25];
-                        (
-                            node["amenity"="hospital"](around:5000,${lat},${lon});
-                            node["amenity"="clinic"](around:5000,${lat},${lon});
-                            node["healthcare"="hospital"](around:5000,${lat},${lon});
-                        );
-                        out body;
-                    `;
-
-                    fetch('https://overpass-api.de/api/interpreter', {
+                    fetch('/api/nearest_hospital', {
                         method: 'POST',
-                        body: query
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ lat: lat, lon: lon })
                     })
-                    .then(res => res.json())
+                    .then(res => {
+                        if (!res.ok) throw new Error('Server error ' + res.status);
+                        return res.json();
+                    })
                     .then(data => {
                         loading.style.display = 'none';
 
-                        if (data.elements.length === 0) {
-                            status.innerHTML = '❌ No medical centers detected in the immediate vicinity.';
+                        // All Overpass mirrors down — show emergency helpline
+                        if (data.api_failed) {
+                            status.innerHTML = `⚠️ Hospital scan unavailable right now. Please call emergency services:
+                                <br><a href="tel:108" style="font-size:1.6rem;font-weight:900;">108</a> (Ambulance) &nbsp;|
+                                <a href="tel:102" style="font-size:1.6rem;font-weight:900;">102</a> (Medical Helpline)`;
                             return;
                         }
 
-                        status.innerHTML = `✅ Successfully mapped ${data.elements.length} nearby medical centers.`;
+                        if (!data.elements || data.elements.length === 0) {
+                            status.innerHTML = '⚠️ No hospitals found within 5 km. Try moving to an open area or dial <strong>108</strong>.';
+                            return;
+                        }
+
+                        status.innerHTML = `✅ Found ${data.elements.length} medical facilities within 5 km.`;
 
                         data.elements.forEach((hospital) => {
                             if (!hospital.lat || !hospital.lon) return;
@@ -161,7 +163,8 @@
                     })
                     .catch(err => {
                         loading.style.display = 'none';
-                        status.innerHTML = '❌ Sensor link failed. OpenStreetMap API unresponsive.';
+                        status.innerHTML = '❌ Unable to reach hospital service. Please check your connection and try again.';
+                        console.error('Hospital fetch error:', err);
                     });
                 },
                 (error) => {

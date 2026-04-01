@@ -18,6 +18,53 @@
         margin-right: 15px; transition: 0.3s;
     }
     input[type=file]::file-selector-button:hover { box-shadow: 0 4px 10px rgba(37,99,235,0.3); transform: scale(1.02); }
+
+    /* ── Delete button ── */
+    .btn-delete {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 7px 14px; font-size: 0.82rem; font-weight: 700;
+        border-radius: 8px; border: 1px solid rgba(220, 38, 38, 0.5);
+        background: rgba(220, 38, 38, 0.08); color: #dc2626;
+        cursor: pointer; transition: all 0.2s ease; white-space: nowrap;
+    }
+    .btn-delete:hover {
+        background: #dc2626; color: #fff;
+        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35);
+        transform: translateY(-1px);
+    }
+
+    /* ── Confirmation modal ── */
+    .modal-overlay {
+        display: none; position: fixed; inset: 0;
+        background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+        z-index: 9999; align-items: center; justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-box {
+        background: #fff; border-radius: 20px; padding: 36px 32px;
+        max-width: 420px; width: 90%; text-align: center;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        animation: modalPop 0.25s cubic-bezier(.34,1.56,.64,1);
+    }
+    @keyframes modalPop {
+        from { transform: scale(0.85); opacity: 0; }
+        to   { transform: scale(1);    opacity: 1; }
+    }
+    .modal-icon { font-size: 3rem; margin-bottom: 12px; }
+    .modal-title { font-size: 1.3rem; font-weight: 800; color: #1e293b; margin-bottom: 8px; }
+    .modal-desc  { color: #64748b; font-size: 0.95rem; margin-bottom: 28px; }
+    .modal-actions { display: flex; gap: 12px; justify-content: center; }
+    .modal-cancel {
+        padding: 10px 26px; border-radius: 10px; font-weight: 700; font-size: 0.95rem;
+        border: 2px solid #e2e8f0; background: #f8fafc; color: #475569; cursor: pointer; transition: 0.2s;
+    }
+    .modal-cancel:hover { background: #e2e8f0; }
+    .modal-confirm {
+        padding: 10px 26px; border-radius: 10px; font-weight: 700; font-size: 0.95rem;
+        border: none; background: linear-gradient(135deg, #dc2626, #b91c1c);
+        color: #fff; cursor: pointer; transition: 0.2s;
+    }
+    .modal-confirm:hover { box-shadow: 0 4px 14px rgba(220,38,38,0.4); transform: translateY(-1px); }
 </style>
 </head>
 <body>
@@ -87,21 +134,33 @@
                                 <th>Notes</th>
                                 <th>Attachment</th>
                                 <th>Timestamp</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for record in records %}
-                            <tr>
+                            <tr id="row-{{ record._id }}">
                                 <td style="font-weight: 700; color: var(--text-main);">{{ record.medical_condition }}</td>
                                 <td>{{ record.notes or '—' }}</td>
                                 <td>
                                     {% if record.file %}
-                                        <a href="/uploads/{{ record.file }}" target="_blank" class="btn" style="padding: 8px 16px; font-size: 0.85rem; background: rgba(37,99,235,0.1); border: 1px solid var(--primary); color: var(--primary);">📄 View</a>
+                                        <a href="{{ url_for('uploaded_file', filename=record.file) }}" target="_blank" class="btn" style="padding: 8px 16px; font-size: 0.85rem; background: rgba(37,99,235,0.1); border: 1px solid var(--primary); color: var(--primary);">📄 View</a>
                                     {% else %}
                                         <span style="color: var(--text-muted);">No File</span>
                                     {% endif %}
                                 </td>
                                 <td style="color: var(--text-muted); font-size: 0.9rem;">{{ record.timestamp.strftime('%d %b %Y, %I:%M %p') }}</td>
+                                <td>
+                                    <button
+                                        class="btn-delete"
+                                        onclick="openDeleteModal('{{ record._id }}', '{{ record.medical_condition }}')"
+                                        title="Delete this record"
+                                    >🗑️ Delete</button>
+                                    <!-- Hidden POST form, submitted by the modal -->
+                                    <form id="del-form-{{ record._id }}"
+                                          action="/delete_record/{{ record._id }}"
+                                          method="POST" style="display:none;"></form>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -117,6 +176,46 @@
 
         </div>
     </div>
+
+    <!-- ── Delete Confirmation Modal ── -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal-box">
+            <div class="modal-icon">🗑️</div>
+            <div class="modal-title">Delete Record?</div>
+            <div class="modal-desc" id="modalDesc">This will permanently delete the record and any attached file. This action cannot be undone.</div>
+            <div class="modal-actions">
+                <button class="modal-cancel" onclick="closeDeleteModal()">Cancel</button>
+                <button class="modal-confirm" id="modalConfirmBtn">Yes, Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    let pendingDeleteFormId = null;
+
+    function openDeleteModal(recordId, condition) {
+        pendingDeleteFormId = 'del-form-' + recordId;
+        document.getElementById('modalDesc').textContent =
+            'You are about to permanently delete the record for "' + condition + '" and any attached file. This cannot be undone.';
+        document.getElementById('deleteModal').classList.add('active');
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('deleteModal').classList.remove('active');
+        pendingDeleteFormId = null;
+    }
+
+    document.getElementById('modalConfirmBtn').addEventListener('click', function () {
+        if (pendingDeleteFormId) {
+            document.getElementById(pendingDeleteFormId).submit();
+        }
+    });
+
+    // Close modal on overlay click
+    document.getElementById('deleteModal').addEventListener('click', function(e) {
+        if (e.target === this) closeDeleteModal();
+    });
+    </script>
 
     <script>
     const container = document.getElementById('particles');

@@ -83,27 +83,44 @@
             </div>
             {% endif %}
 
+            {% if ratios %}
             <div class="card">
-                <h2>🚨 Critical Warning Signs</h2>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Symptom Combos</th>
-                                <th>Possible Condition</th>
-                                <th>Immediate Action Required</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr><td>Severe headache + rash</td><td>Dengue</td><td>Visit hospital immediately</td></tr>
-                            <tr><td>Recurring chills every 48h</td><td>Malaria</td><td>Blood test required</td></tr>
-                            <tr><td>Rose-colored spots on chest</td><td>Typhoid</td><td>Stool/blood culture</td></tr>
-                            <tr><td>Loss of taste/smell</td><td>COVID-19</td><td>RT-PCR test & isolate</td></tr>
-                            <tr><td>Mild fever + runny nose</td><td>Viral Fever</td><td>Rest + paracetamol</td></tr>
-                        </tbody>
-                    </table>
+                <h2 style="color: var(--primary); margin-bottom: 5px;">⚠️ Warning Signs & Immediate Actions</h2>
+                <p style="color: var(--text-muted); margin-bottom: 20px;">Based on your symptoms — watch for these specific warning signs for each matched condition:</p>
+
+                {% for illness, data in ratios.items() %}
+                <div style="margin-bottom: 28px; border-left: 5px solid {{ data['color'] }}; padding-left: 16px;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                        <span style="font-size:1.15rem; font-weight:800; color:{{ data['color'] }}; text-transform:uppercase; letter-spacing:1px;">{{ illness }}</span>
+                        <span style="background:{{ data['color'] }}22; color:{{ data['color'] }}; font-size:0.8rem; font-weight:700; padding:3px 10px; border-radius:20px; border:1px solid {{ data['color'] }}44;">{{ data['probability'] }}% probability</span>
+                    </div>
+
+                    <div class="table-container" style="margin-bottom:10px;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="color:{{ data['color'] }};">Symptom Combo to Watch</th>
+                                    <th style="color:{{ data['color'] }};">Immediate Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sign, action in data['warning_signs'] %}
+                                <tr>
+                                    <td>{{ sign }}</td>
+                                    <td style="font-weight:700;">{{ action }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="background:{{ data['color'] }}11; border:1px solid {{ data['color'] }}33; border-radius:10px; padding:12px 16px; font-size:0.92rem; color:var(--text-main);">
+                        💡 <strong>Recommended Action:</strong> {{ data['action'] }}
+                    </div>
                 </div>
+                {% endfor %}
             </div>
+            {% endif %}
 
         </div>
     </div>
